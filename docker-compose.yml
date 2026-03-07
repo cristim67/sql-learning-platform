@@ -1,0 +1,22 @@
+# server: server/.env — client: client/.env (VITE_GOOGLE_CLIENT_ID for build)
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ./server/.env
+    environment:
+      PORT: "3001"
+    ports:
+      - "3001:3001"
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - server

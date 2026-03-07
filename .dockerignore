@@ -1,0 +1,6 @@
+# Used when building client with context . (so we don't send node_modules)
+client/node_modules
+client/dist
+server/node_modules
+.git
+*.log

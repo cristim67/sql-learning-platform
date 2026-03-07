@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply min-h-screen bg-bg text-text font-sans antialiased leading-relaxed;
+  }
+  #root {
+    @apply min-h-screen;
+  }
+  a {
+    @apply text-accent no-underline;
+  }
+  a:hover {
+    @apply underline;
+  }
+  code {
+    @apply font-mono text-sm bg-bg-hover px-1.5 py-0.5 rounded-md;
+  }
+  pre {
+    @apply font-mono text-sm bg-bg-card border border-border rounded-card px-4 py-4 overflow-x-auto my-4;
+  }
+  pre code {
+    @apply bg-transparent p-0;
+  }
+}
+
+@layer components {
+  .lesson-content h1 {
+    @apply text-xl font-bold mt-6 mb-3;
+  }
+  .lesson-content h2 {
+    @apply text-lg font-semibold mt-5 mb-2;
+  }
+  .lesson-content p {
+    @apply mb-3;
+  }
+  .lesson-content pre {
+    @apply my-4;
+  }
+  .lesson-content ul {
+    @apply my-2 pl-6 list-disc;
+  }
+}
+
+.app-loading {
+  @apply flex items-center justify-center min-h-screen text-lg text-text-muted;
+}
