@@ -24,7 +24,10 @@ export default function Lessons() {
     let cancelled = false;
     (async () => {
       try {
-        const [lessonsData, dbData] = await Promise.all([getLessons(), getUserDb()]);
+        const [lessonsData, dbData] = await Promise.all([
+          getLessons(),
+          getUserDb(),
+        ]);
         if (cancelled) return;
         setLessons(lessonsData.lessons);
         setHasDb(dbData.hasDatabase);
@@ -34,13 +37,19 @@ export default function Lessons() {
           try {
             const data = await generateUserDb();
             if (cancelled) return;
-            setGenMessage(data.saved ? "Database created." : "Database created; add its URL in Settings if needed.");
+            setGenMessage(
+              data.saved
+                ? "Database created."
+                : "Database created; add its URL in Settings if needed.",
+            );
             const refetch = await getUserDb();
             if (cancelled) return;
             setHasDb(refetch.hasDatabase);
           } catch (e) {
             if (cancelled) return;
-            setGenMessage(e instanceof Error ? e.message : "Could not create database.");
+            setGenMessage(
+              e instanceof Error ? e.message : "Could not create database.",
+            );
           } finally {
             if (!cancelled) setGenerating(false);
           }
@@ -51,7 +60,9 @@ export default function Lessons() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading)
@@ -59,9 +70,7 @@ export default function Lessons() {
       <div className="text-center text-text-muted py-8">Loading lessons...</div>
     );
   if (error)
-    return (
-      <div className="text-center text-error py-8">Error: {error}</div>
-    );
+    return <div className="text-center text-error py-8">Error: {error}</div>;
 
   return (
     <div className="animate-fade-in">
@@ -72,15 +81,29 @@ export default function Lessons() {
       {!hasDb && (
         <div className="mb-8 p-4 bg-bg-card border border-border rounded-card">
           {generating ? (
-            <p className="text-sm text-text-muted m-0">Setting up your database…</p>
+            <p className="text-sm text-text-muted m-0">
+              Setting up your database…
+            </p>
           ) : hasGenezioToken ? (
             <>
-              <p className="text-sm text-text-muted m-0 mb-2">Creating your database…</p>
-              {genMessage && <p className="text-sm text-success m-0">{genMessage}</p>}
+              <p className="text-sm text-text-muted m-0 mb-2">
+                Creating your database…
+              </p>
+              {genMessage && (
+                <p className="text-sm text-success m-0">{genMessage}</p>
+              )}
             </>
           ) : (
             <p className="text-sm text-text-muted m-0">
-              Database could not be created automatically. The server must have <code className="text-xs bg-bg-hover px-1 py-0.5 rounded">GENEZIO_TOKEN</code> in .env. <Link to="/settings" className="text-accent hover:underline">Settings</Link>.
+              Database could not be created automatically. The server must have{" "}
+              <code className="text-xs bg-bg-hover px-1 py-0.5 rounded">
+                GENEZIO_TOKEN
+              </code>{" "}
+              in .env.{" "}
+              <Link to="/settings" className="text-accent hover:underline">
+                Settings
+              </Link>
+              .
             </p>
           )}
         </div>
@@ -107,10 +130,24 @@ export default function Lessons() {
               </div>
               {l.progress.completed ? (
                 <span
-                  className="w-8 h-8 flex items-center justify-center bg-success-bg text-success rounded-full text-sm font-bold shrink-0"
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-success-bg text-white shrink-0 shadow-sm ring-1 ring-black/10 dark:ring-white/10"
                   title="Completed"
+                  aria-label="Completed"
                 >
-                  ✓
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
                 </span>
               ) : null}
             </Link>

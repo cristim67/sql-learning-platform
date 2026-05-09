@@ -3,6 +3,41 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* light theme (GitHub-like) */
+    --color-bg: 255 255 255;
+    --color-bg-card: 246 248 250;
+    --color-bg-hover: 234 238 242;
+    --color-border: 208 215 222;
+    --color-text: 31 35 40;
+    --color-text-muted: 101 109 118;
+    --color-accent: 9 105 218;
+    --color-success: 26 127 55;
+    --color-success-bg: 31 136 61;
+    --color-error: 207 34 46;
+  }
+
+  html.dark {
+    /* dark theme (GitHub dark dimmed) */
+    --color-bg: 13 17 22;
+    --color-bg-card: 22 27 34;
+    --color-bg-hover: 33 38 45;
+    --color-border: 48 54 61;
+    --color-text: 230 237 243;
+    --color-text-muted: 139 148 158;
+    --color-accent: 88 166 255;
+    --color-success: 63 185 80;
+    --color-success-bg: 35 134 54;
+    --color-error: 248 81 73;
+  }
+
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
     @apply min-h-screen bg-bg text-text font-sans antialiased leading-relaxed;
   }

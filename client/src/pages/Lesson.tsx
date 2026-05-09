@@ -246,17 +246,19 @@ export default function LessonPage() {
   if (!content) return null;
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in flex flex-col lg:h-full lg:min-h-0">
       <Link
         to="/"
-        className="inline-block mb-4 text-sm text-text-muted no-underline hover:text-accent hover:no-underline"
+        className="inline-block mb-3 text-sm text-text-muted no-underline hover:text-accent hover:no-underline shrink-0"
       >
         ← Back to lessons
       </Link>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-start">
-        {/* LEFT: lesson markdown */}
-        <article className="bg-bg-card border border-border rounded-card px-7 py-7 min-w-0">
+      {/* Split view: each column scrolls independently on lg+; on small screens
+          we fall back to normal page scroll (each column auto-height). */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:flex-1 lg:min-h-0 lg:pb-4">
+        {/* LEFT: lesson markdown — own scroll on lg+ */}
+        <article className="bg-bg-card border border-border rounded-card px-7 py-7 min-w-0 lg:min-h-0 lg:overflow-y-auto">
           <h1 className="text-2xl font-bold text-text m-0 mb-5 pb-4 border-b border-border">
             {title}
           </h1>
@@ -282,9 +284,8 @@ export default function LessonPage() {
           </footer>
         </article>
 
-        {/* RIGHT: workspace (tables on top, SQL editor below). Sticky so it
-            stays visible while scrolling the lesson on the left. */}
-        <aside className="lg:sticky lg:top-20 flex flex-col gap-5 min-w-0">
+        {/* RIGHT: workspace — own scroll on lg+ */}
+        <aside className="flex flex-col gap-5 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
           {/* SQL editor first so users see it without scrolling */}
           <div className="bg-bg-card border border-border rounded-card px-5 py-5">
             <div className="flex items-baseline justify-between mb-2 gap-3 flex-wrap">
@@ -325,10 +326,10 @@ export default function LessonPage() {
               </pre>
             )}
             {runResult && !runError && (
-              <div className="mt-3 max-h-[260px] overflow-auto">
+              <div className="mt-3">
                 {runResult.columns.length > 0 ? (
                   <>
-                    <p className="text-xs text-text-muted m-0 mb-2 sticky top-0 bg-bg-card py-1">
+                    <p className="text-xs text-text-muted m-0 mb-2">
                       {runResult.rows.length} row
                       {runResult.rows.length === 1 ? "" : "s"} returned
                     </p>
@@ -387,10 +388,10 @@ export default function LessonPage() {
               <p className="text-sm text-text-muted m-0">Loading tables…</p>
             )}
 
-            <div className="space-y-4 max-h-[420px] overflow-auto">
+            <div className="space-y-4">
               {previews.map((p) => (
                 <div key={p.name}>
-                  <div className="flex items-baseline justify-between mb-1 sticky top-0 bg-bg-card py-1 z-[1]">
+                  <div className="flex items-baseline justify-between mb-1">
                     <h3 className="text-sm font-semibold text-text m-0 font-mono">
                       {p.name}
                     </h3>
