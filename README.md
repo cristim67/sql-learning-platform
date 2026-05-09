@@ -1,94 +1,80 @@
-# Learn PostgreSQL
+# SQL Learning Platform 🎓
 
-Fullstack app for learning PostgreSQL: Google auth, lessons, and a personal database (connection string stored encrypted).
+A full-stack educational platform for learning SQL (PostgreSQL), developed as a technical master's thesis project. The platform allows users to complete interactive lessons, configure their own databases, and track their progress in a secure environment.
 
-## Structure
+## 🚀 Key Features
 
-- **backend/** – Bun + Elysia + Prisma + PostgreSQL API
-- **frontend/** – React + Vite
+- **Google OAuth 2.0 Authentication**: Secure integration for quick access.
+- **Interactive Lesson System**: Lesson catalog with automatic progress saving.
+- **User Data Isolation**: Each user configures their own PostgreSQL database (via Genezio/Docker/External).
+- **Advanced Security**: Connection strings (URLs) are stored encrypted (AES-256-GCM) in the main database.
+- **Modern Architecture**:
+  - **Backend**: Bun + ElysiaJS + Prisma ORM.
+  - **Frontend**: React + Vite + TailwindCSS.
 
-## Requirements
+## 📂 Project Structure
 
-- [Bun](https://bun.sh)
-- Node 18+ (for frontend, optional if using Bun everywhere)
-- PostgreSQL (connection string in `.env`)
-- Google Cloud: OAuth Client ID
+- `server/` – Backend API (TypeScript, Elysia, Prisma).
+- `client/` – Frontend application (React).
+- `report/` – Detailed technical report (LaTeX).
+- `demo/` – Video recording showcasing the platform's functionality.
 
-## Setup
+## 🛠️ Requirements
 
-### 1. Backend
+- [Bun Runtime](https://bun.sh) (recommended) or Node.js 18+.
+- PostgreSQL (for the central database).
+- Google Cloud account (for OAuth Client ID).
+
+## ⚙️ Setup and Run
+
+### 1. Backend (Server)
 
 ```bash
-cd backend
+cd server
 cp .env.example .env
 # Edit .env: DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY, GOOGLE_CLIENT_ID
-# Generate keys: openssl rand -base64 32  (JWT), openssl rand -hex 32  (ENCRYPTION_KEY)
 
 bun install
 bun run db:generate
-bun run db:migrate:dev    # first time: creates tables (migration)
+bun run db:migrate:dev    # Creates initial tables
 bun run dev
 ```
 
-Server: http://localhost:3001
-
-### 2. Frontend
+### 2. Frontend (Client)
 
 ```bash
-cd frontend
+cd client
 cp .env.example .env
-# Edit .env: VITE_GOOGLE_CLIENT_ID (same Client ID as backend)
+# Edit .env: VITE_GOOGLE_CLIENT_ID (same as server)
 
-bun install   # or npm install
-bun run dev   # or npm run dev
+bun install
+bun run dev
 ```
 
-App: http://localhost:5173
+---
 
-### 3. Google OAuth
+## 🐳 Run with Docker (Recommended)
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials.
-2. Create **OAuth 2.0 Client ID** (type: Web application).
-3. Add to **Authorized JavaScript origins**: `http://localhost:5173` (and production domain).
-4. Copy Client ID into `backend/.env` (GOOGLE_CLIENT_ID) and `frontend/.env` (VITE_GOOGLE_CLIENT_ID).
+The platform includes a complete `docker-compose` configuration that starts both the client (served via Nginx) and the server.
 
-## Migrations
-
-- Tables are **not** created automatically on startup; use Prisma migrations.
-- First run: `bun run db:migrate:dev` (or `db:migrate` in production).
-- Migrations live in `backend/prisma/migrations/`.
-
-## API (backend)
-
-- `POST /api/auth/google` – body: `{ "credential": "<google-id-token>" }` → returns JWT and user.
-- `GET /api/auth/me` – Header: `Authorization: Bearer <token>` → current user.
-- `GET /api/lessons` – list lessons + progress (auth).
-- `GET /api/lessons/:slug` – lesson detail (auth).
-- `POST /api/lessons/:slug/complete` – mark lesson as completed (auth).
-- `GET /api/user-db` – check if user has a DB saved (auth).
-- `POST /api/user-db` – body: `{ "connectionUrl": "..." }` – save URL encrypted (auth).
-- `GET /api/user-db/decrypted` – return decrypted URL (server/backend only, auth).
-
-## Security
-
-- JWT for sessions; Google token is verified on the backend.
-- User DB connection string is stored encrypted (AES-256-GCM) in the database.
-- CORS limited to `FRONTEND_ORIGIN`.
-- Sensitive values only in `.env`, never in code.
-
-## Docker
-
-Single env file: **server/.env** (copy from `server/.env.example`). Run from project root:
+1. Ensure you have a valid `.env` file in the `server/` folder.
+2. From the project root, run:
 
 ```bash
-export $(grep -v '^#' server/.env | xargs) && docker compose up --build
+docker-compose up --build
 ```
 
-- **App:** http://localhost (nginx serves the client and proxies `/api` to the server)
-- **API:** http://localhost:3001
+- **Application**: [http://localhost](http://localhost) (Nginx proxies `/api` to the server).
+- **Backend API**: [http://localhost:3001](http://localhost:3001).
 
-For Google OAuth when using Docker, add `http://localhost` to Authorized JavaScript origins in Google Cloud Console.
+---
 
-## User database
+## 📄 Technical Documentation
 
-Users can configure their own PostgreSQL (e.g. via your create DB API). After they get the connection string, they can save it from Settings; it is stored encrypted. Decryption happens only on the server when needed (e.g. for future exercises).
+For in-depth details about the database architecture, Prisma modeling, security flows, and design decisions, refer to the technical report in `report/main.pdf`.
+
+---
+
+## 🎥 Demo
+
+A video demonstration of the platform (authentication, lesson setup, script execution) can be found in the `demo/` folder.
