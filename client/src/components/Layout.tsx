@@ -63,7 +63,13 @@ export default function Layout() {
           </button>
         </div>
       </header>
-      <main className="flex-1 px-6 py-8 max-w-[900px] w-full mx-auto">
+      <main
+        className={`flex-1 px-6 py-8 w-full mx-auto ${
+          location.pathname.startsWith("/lesson/")
+            ? "max-w-[1400px]"
+            : "max-w-[900px]"
+        }`}
+      >
         <Outlet />
       </main>
     </div>

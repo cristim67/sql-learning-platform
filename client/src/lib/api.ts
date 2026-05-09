@@ -61,8 +61,34 @@ export async function getLesson(slug: string) {
       title: string;
       description: string | null;
       content: string;
-      progress: { completed: boolean; completedAt: string | null };
+      tables: string[];
+      starterSql: string | null;
+      progress: {
+        completed: boolean;
+        completedAt: string | null;
+        setupAt: string | null;
+      };
     };
+  };
+}
+
+export async function setupLesson(slug: string, force = false) {
+  const token = getToken();
+  if (!token) throw new Error("Unauthorized");
+  const url = force
+    ? `${API}/lessons/${slug}/setup?force=1`
+    : `${API}/lessons/${slug}/setup`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Setup failed");
+  return data as {
+    ok: boolean;
+    ranSetup: boolean;
+    reason?: string;
+    tables?: string[];
   };
 }
 
@@ -92,6 +118,17 @@ export async function getUserDb() {
     hasGenezioToken: boolean;
     url: string | null;
   };
+}
+
+export async function getUserDbUrl() {
+  const token = getToken();
+  if (!token) throw new Error("Unauthorized");
+  const res = await fetch(`${API}/user-db/decrypted`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Failed");
+  return data as { url: string };
 }
 
 export async function saveUserDb(connectionUrl: string) {

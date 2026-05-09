@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { getUserDb, saveUserDb, generateUserDb } from "../lib/api";
+import {
+  getUserDb,
+  saveUserDb,
+  generateUserDb,
+  getUserDbUrl,
+} from "../lib/api";
 
 export default function Settings() {
   const [hasDb, setHasDb] = useState(false);
@@ -14,6 +19,10 @@ export default function Settings() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [url, setUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const [showUrl, setShowUrl] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const load = () => {
     getUserDb()
@@ -26,6 +35,38 @@ export default function Settings() {
         setMessage({ type: "err", text: "Could not load settings." }),
       )
       .finally(() => setLoading(false));
+  };
+
+  const handleRevealUrl = async () => {
+    if (currentUrl) {
+      setShowUrl((v) => !v);
+      return;
+    }
+    setRevealing(true);
+    setMessage(null);
+    try {
+      const data = await getUserDbUrl();
+      setCurrentUrl(data.url);
+      setShowUrl(true);
+    } catch (e) {
+      setMessage({
+        type: "err",
+        text: e instanceof Error ? e.message : "Could not load URL.",
+      });
+    } finally {
+      setRevealing(false);
+    }
+  };
+
+  const handleCopyUrl = async () => {
+    if (!currentUrl) return;
+    try {
+      await navigator.clipboard.writeText(currentUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setMessage({ type: "err", text: "Could not copy to clipboard." });
+    }
   };
 
   useEffect(() => {
@@ -64,6 +105,8 @@ export default function Settings() {
       await saveUserDb(value);
       setHasDb(true);
       setUrl("");
+      setCurrentUrl(null);
+      setShowUrl(false);
       setMessage({ type: "ok", text: "Connection URL saved (encrypted)." });
       load();
     } catch (e) {
@@ -96,6 +139,38 @@ export default function Settings() {
                 ? "Your database is set up."
                 : "Database created; add connection URL in Advanced below to use live view."}
             </p>
+            {hasConnectionUrl && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleRevealUrl}
+                    disabled={revealing}
+                    className="text-sm px-4 py-2 rounded-[10px] border-0 bg-bg-hover text-text font-medium cursor-pointer hover:brightness-95 disabled:opacity-70"
+                  >
+                    {revealing
+                      ? "Loading..."
+                      : currentUrl && showUrl
+                        ? "Hide URL"
+                        : "Show URL"}
+                  </button>
+                  {currentUrl && showUrl && (
+                    <button
+                      type="button"
+                      onClick={handleCopyUrl}
+                      className="text-sm px-4 py-2 rounded-[10px] border-0 bg-bg-hover text-text font-medium cursor-pointer hover:brightness-95"
+                    >
+                      {copied ? "Copied!" : "Copy"}
+                    </button>
+                  )}
+                </div>
+                {currentUrl && showUrl && (
+                  <pre className="mt-3 font-mono text-xs px-4 py-3 rounded-lg border border-border bg-bg text-text whitespace-pre-wrap break-all max-w-full overflow-x-auto m-0">
+                    {currentUrl}
+                  </pre>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <>

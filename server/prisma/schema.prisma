@@ -39,6 +39,7 @@ model LessonProgress {
   lessonId    String
   completed   Boolean   @default(false)
   completedAt DateTime?
+  setupAt     DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

@@ -1,15 +1,67 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getLesson, completeLesson, getLiveDb, runSql } from "../lib/api";
+import { getLesson, completeLesson, runSql, setupLesson } from "../lib/api";
 
-type LiveTables = { tables: Array<{ schema: string; name: string }> };
-type LiveRows = { table: string; columns: string[]; rows: Record<string, unknown>[] };
+type RunResult = {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number | null;
+  command?: string;
+};
 
-const DEFAULT_SQL = "SELECT 'Hello, PostgreSQL!' AS message;";
+type TablePreview = {
+  name: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+  error?: string;
+};
 
-function getFirstCodeBlock(md: string): string | null {
-  const m = md.match(/```(?:\w+)?\n([\s\S]*?)```/);
-  return m ? m[1].trim() : null;
+const PREVIEW_LIMIT = 50;
+
+function ResultTable({
+  columns,
+  rows,
+}: {
+  columns: string[];
+  rows: Record<string, unknown>[];
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm border-collapse">
+        <thead>
+          <tr>
+            {columns.map((col) => (
+              <th
+                key={col}
+                className="border border-border px-2 py-1 bg-bg-hover font-medium font-mono"
+              >
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {columns.map((col) => (
+                <td
+                  key={col}
+                  className="border border-border px-2 py-1 font-mono text-xs"
+                >
+                  {row[col] != null ? (
+                    String(row[col])
+                  ) : (
+                    <span className="text-text-muted italic">NULL</span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default function LessonPage() {
@@ -17,46 +69,142 @@ export default function LessonPage() {
   const [content, setContent] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [completed, setCompleted] = useState(false);
+  const [tables, setTables] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [marking, setMarking] = useState(false);
-  const [liveData, setLiveData] = useState<LiveTables | LiveRows | null>(null);
-  const [liveError, setLiveError] = useState<string | null>(null);
-  const [selectedTable, setSelectedTable] = useState<string | null>(null);
-  const [sqlInput, setSqlInput] = useState(DEFAULT_SQL);
-  const [runResult, setRunResult] = useState<{ columns: string[]; rows: Record<string, unknown>[]; rowCount: number | null; command?: string } | null>(null);
+
+  const [setupState, setSetupState] = useState<
+    "idle" | "running" | "ready" | "error"
+  >("idle");
+  const [setupMsg, setSetupMsg] = useState<string | null>(null);
+
+  const [previews, setPreviews] = useState<TablePreview[]>([]);
+  const [previewsLoading, setPreviewsLoading] = useState(false);
+
+  const [sqlInput, setSqlInput] = useState("SELECT * FROM employees;");
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
+  const tablesRef = useRef<string[]>([]);
+  tablesRef.current = tables;
+
+  const sqlTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  /** If the user highlighted text, run only that (trimmed). Otherwise run the whole editor. */
+  const getSqlToRun = (): string => {
+    const el = sqlTextareaRef.current;
+    const full = sqlInput;
+    if (el && el.selectionStart !== el.selectionEnd) {
+      return full.slice(el.selectionStart, el.selectionEnd).trim();
+    }
+    return full.trim();
+  };
+
+  const loadPreviews = useCallback(async (tableNames: string[]) => {
+    if (tableNames.length === 0) {
+      setPreviews([]);
+      return;
+    }
+    setPreviewsLoading(true);
+    try {
+      const results = await Promise.all(
+        tableNames.map(async (t): Promise<TablePreview> => {
+          try {
+            const r = await runSql(
+              `SELECT * FROM "${t}" LIMIT ${PREVIEW_LIMIT}`,
+            );
+            return {
+              name: t,
+              columns: r.columns,
+              rows: r.rows,
+              rowCount: r.rows.length,
+            };
+          } catch (e) {
+            return {
+              name: t,
+              columns: [],
+              rows: [],
+              rowCount: 0,
+              error: e instanceof Error ? e.message : "Error",
+            };
+          }
+        }),
+      );
+      setPreviews(results);
+    } finally {
+      setPreviewsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!slug) return;
-    getLesson(slug)
-      .then((data) => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setSetupState("idle");
+    setSetupMsg(null);
+    setPreviews([]);
+    setRunResult(null);
+    setRunError(null);
+
+    (async () => {
+      try {
+        const data = await getLesson(slug);
+        if (cancelled) return;
         setTitle(data.lesson.title);
         setContent(data.lesson.content);
         setCompleted(data.lesson.progress.completed);
-        setSqlInput(getFirstCodeBlock(data.lesson.content) ?? DEFAULT_SQL);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "Error"))
-      .finally(() => setLoading(false));
-  }, [slug]);
+        setTables(data.lesson.tables);
+        setSqlInput(data.lesson.starterSql ?? "SELECT 1;");
 
-  useEffect(() => {
-    if (selectedTable) {
-      setLiveError(null);
-      getLiveDb(selectedTable)
-        .then((data) => setLiveData(data as LiveRows))
-        .catch((e) => setLiveError(e instanceof Error ? e.message : "Error"));
-    } else {
-      setLiveError(null);
-      getLiveDb()
-        .then((data) => setLiveData(data as LiveTables))
-        .catch((e) => {
-          setLiveData(null);
-          setLiveError(e instanceof Error ? e.message : "Error");
-        });
+        if (data.lesson.tables.length > 0) {
+          setSetupState("running");
+          setSetupMsg("Preparing your workspace…");
+          try {
+            const r = await setupLesson(slug, false);
+            if (cancelled) return;
+            setSetupState("ready");
+            setSetupMsg(
+              r.ranSetup
+                ? "Workspace tables created."
+                : "Workspace tables already set up.",
+            );
+            await loadPreviews(data.lesson.tables);
+          } catch (e) {
+            if (cancelled) return;
+            setSetupState("error");
+            setSetupMsg(e instanceof Error ? e.message : "Setup failed");
+          }
+        } else {
+          setSetupState("ready");
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Error");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, loadPreviews]);
+
+  const handleResetTables = async () => {
+    if (!slug) return;
+    setSetupState("running");
+    setSetupMsg("Resetting tables…");
+    try {
+      await setupLesson(slug, true);
+      setSetupState("ready");
+      setSetupMsg("Tables reset to initial state.");
+      await loadPreviews(tablesRef.current);
+    } catch (e) {
+      setSetupState("error");
+      setSetupMsg(e instanceof Error ? e.message : "Reset failed");
     }
-  }, [selectedTable]);
+  };
 
   const handleComplete = async () => {
     if (!slug || marking || completed) return;
@@ -71,17 +219,8 @@ export default function LessonPage() {
     }
   };
 
-  const refreshLive = () => {
-    setLiveError(null);
-    if (selectedTable) {
-      getLiveDb(selectedTable).then((data) => setLiveData(data as LiveRows)).catch((e) => setLiveError(e instanceof Error ? e.message : "Error"));
-    } else {
-      getLiveDb().then((data) => setLiveData(data as LiveTables)).catch((e) => { setLiveData(null); setLiveError(e instanceof Error ? e.message : "Error"); });
-    }
-  };
-
   const handleRunSql = async () => {
-    const q = sqlInput.trim();
+    const q = getSqlToRun();
     if (!q) return;
     setRunning(true);
     setRunError(null);
@@ -89,7 +228,8 @@ export default function LessonPage() {
     try {
       const data = await runSql(q);
       setRunResult(data);
-      refreshLive();
+      // Refresh previews so the user sees the effect of INSERT/UPDATE/DELETE.
+      loadPreviews(tablesRef.current);
     } catch (e) {
       setRunError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -102,25 +242,22 @@ export default function LessonPage() {
       <div className="text-center text-text-muted py-8">Loading lesson...</div>
     );
   if (error)
-    return (
-      <div className="text-center text-error py-8">Error: {error}</div>
-    );
+    return <div className="text-center text-error py-8">Error: {error}</div>;
   if (!content) return null;
 
-  const isTables = liveData && "tables" in liveData;
-  const isRows = liveData && "rows" in liveData;
-
   return (
-    <div className="animate-fade-in flex gap-8 flex-wrap">
-      <div className="flex-1 min-w-0">
-        <Link
-          to="/"
-          className="inline-block mb-6 text-sm text-text-muted no-underline hover:text-accent hover:no-underline"
-        >
-          ← Back to lessons
-        </Link>
-        <article className="bg-bg-card border border-border rounded-card px-8 py-8">
-          <h1 className="text-2xl font-bold text-text m-0 mb-6 pb-4 border-b border-border">
+    <div className="animate-fade-in">
+      <Link
+        to="/"
+        className="inline-block mb-4 text-sm text-text-muted no-underline hover:text-accent hover:no-underline"
+      >
+        ← Back to lessons
+      </Link>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-start">
+        {/* LEFT: lesson markdown */}
+        <article className="bg-bg-card border border-border rounded-card px-7 py-7 min-w-0">
+          <h1 className="text-2xl font-bold text-text m-0 mb-5 pb-4 border-b border-border">
             {title}
           </h1>
           <div
@@ -144,140 +281,139 @@ export default function LessonPage() {
             )}
           </footer>
         </article>
-      </div>
 
-      {/* Live DB panel + Run SQL */}
-      <aside className="w-full sm:max-w-[420px] shrink-0">
-        <div className="bg-bg-card border border-border rounded-card px-5 py-5 sticky top-24 space-y-5">
-          <section>
-            <h2 className="text-lg font-semibold text-text m-0 mb-2">Run SQL</h2>
-            <p className="text-sm text-text-muted m-0 mb-2">Run queries against your database. Try the examples from the lesson.</p>
+        {/* RIGHT: workspace (tables on top, SQL editor below). Sticky so it
+            stays visible while scrolling the lesson on the left. */}
+        <aside className="lg:sticky lg:top-20 flex flex-col gap-5 min-w-0">
+          {/* SQL editor first so users see it without scrolling */}
+          <div className="bg-bg-card border border-border rounded-card px-5 py-5">
+            <div className="flex items-baseline justify-between mb-2 gap-3 flex-wrap">
+              <h2 className="text-lg font-semibold text-text m-0">Run SQL</h2>
+              <span className="text-xs text-text-muted">
+                ⌘/Ctrl+Enter — runs selection if highlighted, else all
+              </span>
+            </div>
             <textarea
+              ref={sqlTextareaRef}
               value={sqlInput}
               onChange={(e) => setSqlInput(e.target.value)}
-              placeholder="SELECT 1;"
-              rows={4}
-              className="w-full font-mono text-sm px-3 py-2 rounded-lg border border-border bg-bg text-text placeholder:text-text-muted focus:outline-none focus:border-accent resize-y min-h-[80px]"
+              placeholder="SELECT * FROM employees;"
+              rows={5}
+              className="w-full font-mono text-sm px-3 py-2 rounded-lg border border-border bg-bg text-text placeholder:text-text-muted focus:outline-none focus:border-accent resize-y min-h-[110px]"
               spellCheck={false}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  handleRunSql();
+                }
+              }}
             />
-            <button
-              type="button"
-              onClick={handleRunSql}
-              disabled={running || !sqlInput.trim()}
-              className="mt-2 text-sm px-4 py-2 rounded-[10px] border-0 bg-accent text-white font-medium cursor-pointer hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {running ? "Running…" : "Run"}
-            </button>
+            <div className="flex items-center gap-3 mt-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleRunSql}
+                disabled={running || !getSqlToRun() || setupState === "running"}
+                className="text-sm px-4 py-2 rounded-[10px] border-0 bg-accent text-white font-medium cursor-pointer hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {running ? "Running…" : "Run"}
+              </button>
+            </div>
+
             {runError && (
-              <p className="text-sm text-error mt-2 m-0">{runError}</p>
+              <pre className="mt-3 text-sm text-error m-0 whitespace-pre-wrap break-words">
+                {runError}
+              </pre>
             )}
             {runResult && !runError && (
-              <div className="mt-3">
+              <div className="mt-3 max-h-[260px] overflow-auto">
                 {runResult.columns.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <p className="text-sm text-text-muted m-0 mb-2">{runResult.rows.length} row(s)</p>
-                    <table className="w-full text-left text-sm border-collapse">
-                      <thead>
-                        <tr>
-                          {runResult.columns.map((c) => (
-                            <th key={c} className="border border-border px-2 py-1 bg-bg-hover font-medium">{c}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {runResult.rows.map((row, i) => (
-                          <tr key={i}>
-                            {runResult.columns.map((col) => (
-                              <td key={col} className="border border-border px-2 py-1">
-                                {row[col] != null ? String(row[col]) : "NULL"}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <>
+                    <p className="text-xs text-text-muted m-0 mb-2 sticky top-0 bg-bg-card py-1">
+                      {runResult.rows.length} row
+                      {runResult.rows.length === 1 ? "" : "s"} returned
+                    </p>
+                    <ResultTable
+                      columns={runResult.columns}
+                      rows={runResult.rows}
+                    />
+                  </>
                 ) : (
                   <p className="text-sm text-success m-0">
-                    Done.{runResult.rowCount != null && runResult.rowCount >= 0 ? ` ${runResult.rowCount} row(s) affected.` : ""}
+                    Done.
+                    {runResult.rowCount != null && runResult.rowCount >= 0
+                      ? ` ${runResult.rowCount} row(s) affected.`
+                      : ""}
                   </p>
                 )}
               </div>
             )}
-          </section>
-          <section>
-            <h2 className="text-lg font-semibold text-text m-0 mb-3">Your database (live)</h2>
-            {liveError && (
-              <p className="text-sm text-error m-0 mb-3">{liveError}</p>
-            )}
-            {isTables && liveData.tables.length === 0 && !liveError && (
-              <p className="text-sm text-text-muted m-0">No tables in public schema yet.</p>
-            )}
-          {isTables && liveData.tables.length > 0 && (
-            <>
-              <p className="text-sm text-text-muted m-0 mb-2">Tables:</p>
-              <ul className="list-none m-0 p-0 flex flex-wrap gap-2 mb-3">
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTable(null)}
-                    className={`text-sm px-2 py-1 rounded border cursor-pointer ${
-                      !selectedTable
-                        ? "bg-accent text-white border-accent"
-                        : "bg-bg border-border text-text hover:border-accent"
-                    }`}
-                  >
-                    (list)
-                  </button>
-                </li>
-                {liveData.tables.map((t) => (
-                  <li key={`${t.schema}.${t.name}`}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTable(t.name)}
-                      className={`text-sm px-2 py-1 rounded border cursor-pointer font-mono ${
-                        selectedTable === t.name
-                          ? "bg-accent text-white border-accent"
-                          : "bg-bg border-border text-text hover:border-accent"
-                      }`}
-                    >
-                      {t.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {isRows && (
-            <div className="overflow-x-auto">
-              <p className="text-sm text-text-muted m-0 mb-2">Table &quot;{liveData.table}&quot; (first 10 rows)</p>
-              <table className="w-full text-left text-sm border-collapse">
-                <thead>
-                  <tr>
-                    {liveData.columns.map((col) => (
-                      <th key={col} className="border border-border px-2 py-1 bg-bg-hover font-medium">
-                        {col}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {liveData.rows.map((row, i) => (
-                    <tr key={i}>
-                      {liveData.columns.map((col) => (
-                        <td key={col} className="border border-border px-2 py-1">
-                          {row[col] != null ? String(row[col]) : "NULL"}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          </div>
+
+          <div className="bg-bg-card border border-border rounded-card px-5 py-5">
+            <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+              <h2 className="text-lg font-semibold text-text m-0">
+                Lesson tables
+              </h2>
+              <button
+                type="button"
+                onClick={handleResetTables}
+                disabled={setupState === "running"}
+                className="text-xs px-3 py-1.5 rounded-[10px] border-0 bg-bg-hover text-text font-medium cursor-pointer hover:brightness-95 disabled:opacity-60"
+                title="Drop and recreate the lesson tables with the original data"
+              >
+                {setupState === "running" ? "Working…" : "Reset tables"}
+              </button>
             </div>
-          )}
-          </section>
-        </div>
-      </aside>
+
+            {setupMsg && (
+              <p
+                className={
+                  setupState === "error"
+                    ? "text-xs text-error m-0 mb-2"
+                    : "text-xs text-text-muted m-0 mb-2"
+                }
+              >
+                {setupMsg}
+              </p>
+            )}
+
+            {tables.length === 0 && setupState === "ready" && (
+              <p className="text-sm text-text-muted m-0">
+                This lesson has no setup tables.
+              </p>
+            )}
+
+            {previewsLoading && previews.length === 0 && (
+              <p className="text-sm text-text-muted m-0">Loading tables…</p>
+            )}
+
+            <div className="space-y-4 max-h-[420px] overflow-auto">
+              {previews.map((p) => (
+                <div key={p.name}>
+                  <div className="flex items-baseline justify-between mb-1 sticky top-0 bg-bg-card py-1 z-[1]">
+                    <h3 className="text-sm font-semibold text-text m-0 font-mono">
+                      {p.name}
+                    </h3>
+                    {!p.error && (
+                      <span className="text-xs text-text-muted">
+                        {p.rowCount} row{p.rowCount === 1 ? "" : "s"}
+                        {p.rowCount === PREVIEW_LIMIT ? " (max preview)" : ""}
+                      </span>
+                    )}
+                  </div>
+                  {p.error ? (
+                    <p className="text-sm text-error m-0">{p.error}</p>
+                  ) : p.rows.length === 0 ? (
+                    <p className="text-sm text-text-muted m-0">empty</p>
+                  ) : (
+                    <ResultTable columns={p.columns} rows={p.rows} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
@@ -290,7 +426,19 @@ function markdownToHtml(md: string): string {
   let codeBuf: string[] = [];
 
   function bold(s: string) {
-    return s.replace(/\*\*(.+?)\*\*/g, (_, g) => `<strong>${escapeHtml(g)}</strong>`);
+    return s.replace(
+      /\*\*(.+?)\*\*/g,
+      (_, g) => `<strong>${escapeHtml(g)}</strong>`,
+    );
+  }
+  function inlineCode(s: string) {
+    return s.replace(/`([^`]+)`/g, (_, g) => `<code>${escapeHtml(g)}</code>`);
+  }
+  function inline(s: string) {
+    // bold first, then inline code on the rest. To avoid escaping codes twice,
+    // escape -> bold (already escapes its arg) -> we manually do code spans
+    // on the escaped string for simplicity.
+    return inlineCode(bold(escapeHtml(s)));
   }
   function closeList() {
     if (inList) {
@@ -316,12 +464,12 @@ function markdownToHtml(md: string): string {
     }
     if (line.startsWith("# ")) {
       closeList();
-      out.push(`<h1>${bold(escapeHtml(line.slice(2)))}</h1>`);
+      out.push(`<h1>${inline(line.slice(2))}</h1>`);
       continue;
     }
     if (line.startsWith("## ")) {
       closeList();
-      out.push(`<h2>${bold(escapeHtml(line.slice(3)))}</h2>`);
+      out.push(`<h2>${inline(line.slice(3))}</h2>`);
       continue;
     }
     if (line.startsWith("- ")) {
@@ -329,7 +477,7 @@ function markdownToHtml(md: string): string {
         out.push("<ul>");
         inList = true;
       }
-      out.push(`<li>${bold(escapeHtml(line.slice(2)))}</li>`);
+      out.push(`<li>${inline(line.slice(2))}</li>`);
       continue;
     }
     if (line.trim() === "") {
@@ -338,7 +486,7 @@ function markdownToHtml(md: string): string {
       continue;
     }
     closeList();
-    out.push(`<p>${bold(escapeHtml(line))}</p>`);
+    out.push(`<p>${inline(line)}</p>`);
   }
   closeList();
   if (inCode && codeBuf.length) {
